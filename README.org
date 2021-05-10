@@ -1,0 +1,74 @@
+* ahkd
+
+  ahkd (Alex's HotKey Daemon) is a generic hotkey daemon for X11 and
+  Wayland, designed to provide key bindings to window managers like
+  ~bspwm~ and others that don't include their own.
+
+** Project state
+
+   - [ ] Configuration file parsing
+   - [-] X11 compatibility (~x11rb~)
+     - [X] Key listening
+     - [ ] Key synthesis
+   - [ ] Wayland compatibility
+     - [ ] Key listening
+     - [ ] Key synthesis
+   - [ ] ~bind~ command
+   - [ ] ~map~ command
+
+** Usage
+
+   To use ~ahkd~, the first thing you should do is create a
+   configuration file; an example file is provided in the project
+   root. Once you have done this, you can build the project using
+   ~cargo build --release~, after which you can run ~ahkd
+   <config-file-name>~ to load and execute your config file. Run ~ahkd
+   --help~ for more detailed information on program usage.
+   # TODO: document usage information here too. I would do it now but
+   # I haven't started writing the CLI yet and can't think of what
+   # options it'll need.
+
+** Configuration file syntax
+
+   The configuration file is just a text file where each line is
+   either blank, a comment (whose first non-whitespace character is
+   "#"), or a command. Each command begins with either the word "bind"
+   or the word "map", denoting an action to be taken when a sequence
+   of keys are pressed.
+
+** Key sequences
+
+   The commands in ~ahkd~ all operate on key sequences. A key sequence
+   are specified as space-separated sequences of "key chords", which
+   are set of optionally one or more modifiers (control, shift, meta,
+   alt, super) followed by a key name. Modifiers and keys can be
+   separated by either hyphens or plus symbols.
+
+*** Modifier names
+
+    # TODO: Figure out the mapping to X11's "mod1", "mod2", "mod3",
+    # "mod4", and "mod5" internal modifier names, and add support for
+    # that syntax.
+    Modifiers are designed to be amenable to several different styles
+    to fit users with different backgrounds. The following modifier
+    keys and aliases thereof are recognized:
+    - Control, Ctrl, C.
+    - Alt, Meta, A, M.
+    - Shift, S.
+    - Super, Windows, Command, s.
+    - Hyper, h.
+    Single-letter names are case-sensitive to make shift and super
+    distinguishable, but the other modifier names are not.
+
+*** Key names
+
+    Key names are the standard X11 keysyms. For lowercase and
+    uppercase ASCII letters, these are just the letter in lower- and
+    uppercase, respectively; for other characters, use ~xev | grep
+    'keysym'~ to print keysym names.
+
+    Note that keysyms should agree with modifiers; for example, write
+    "shift+colon" and "semicolon", rather than "shift+semicolon" and
+    "colon", because it is impossible (at least on an ~en_US~
+    keyboard) to type a colon while not holding shift or to type a
+    semicolon while holding shift.

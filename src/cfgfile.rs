@@ -61,13 +61,22 @@ pub struct LineText<'a> {
 
     /// The range of characters delimiting the substring.
     pub range: Range<usize>,
+
+    /// The value of `text[range]`, i.e., another pointer into `text`.
+    /// This value takes O(n) to compute because of unicode, so we
+    /// cache it here and can therefore fetch it in O(1).
+    pub substring: &'a str,
 }
 
 /// Iterator over the sections in a line of text separated by some
 /// pattern.
-pub struct LineSplit<'a, 'b, P: Fn(char) -> bool> {
-    /// The LineText we're sourcing string data from.
-    line_text: &'a LineText<'b>,
+pub struct LineSplit<'a, P: Fn(char) -> bool> {
+    /// Whether we're done reading subsections.
+    done: bool,
+
+    /// The LineText we haven't looked at yet; this shrinks as we read
+    /// more subsections.
+    line_text: LineText<'a>,
 
     /// The pattern we're splitting by.
     pattern: P,
@@ -76,12 +85,6 @@ pub struct LineSplit<'a, 'b, P: Fn(char) -> bool> {
     /// whether `"foo---bar"` with a pattern of `'-'` would report
     /// `"foo","bar"` rather than `"foo","","","bar"`.
     merge: bool,
-
-    /// The index of the first character in the LineText's range that
-    /// hasn't been looked at yet (such that 0 means the first
-    /// character is `line_text.text[line_text.range.start]`). If this
-    /// is None, we're done searching.
-    next_char: Option<usize>,
 }
 
 /// An error arising from parsing.
@@ -146,15 +149,11 @@ impl<'a> LineText<'a> {
     /// satisfies `pattern`. If `merge` is true, merges multiple
     /// instances of the pattern into one, thereby never emitting a
     /// blank string.
-    pub fn split<'b, P: Fn(char) -> bool>(
-        &'b self,
-        pattern: P,
-        merge: bool,
-    ) -> LineSplit<'a, 'b, P> {
+    pub fn split<P: Fn(char) -> bool>(&self, pattern: P, merge: bool) -> LineSplit<'a, P> {
         LineSplit {
-            line_text: self,
+            done: false,
+            line_text: self.clone(),
             pattern,
-            next_char: Some(0),
             merge,
         }
     }
@@ -171,17 +170,9 @@ impl<'a> LineText<'a> {
         let remaining = &self.text[self.range.clone()];
         match remaining.find(|c| pattern(c)) {
             Some(split_idx) => Ok((
-                // This range manipulation strikes me as nasty... not
-                // sure if Rust has a better way of doing it though.
-                LineText {
-                    range: self.range.start..self.range.start + split_idx,
-                    ..*self
-                },
-                LineText {
-                    range: self.range.start + split_idx + 1..self.range.end,
-                    ..*self
-                },
-            )),
+                self.substr(None, Some(split_idx)),
+                self.substr(Some(split_idx + 1), None))
+            ),
             None => {
                 Err(SyntaxError {
                     err_msg: err_msg.to_string(),
@@ -195,54 +186,48 @@ impl<'a> LineText<'a> {
         }
     }
 
-    /// Gets the actual string underlying the LineText.
-    pub fn get_text(&self) -> &'a str {
-        // TODO: make a struct field that tracks this rather than
-        // creating it using a function like this. This function is
-        // O(n) (assuming the compiler doesn't optimize it out or
-        // anything), but we could be O(1) if we just kept track of
-        // the result.
-        &self.text[self.range.clone()]
-    }
-}
+    /// Takes a substring of a LineText, between the two indices. If
+    /// `start` is None, uses the beginning of the string, and if
+    /// `end` is None, uses the end of the string.
+    pub fn substr(&self, start: Option<usize>, end: Option<usize>) -> Self {
+        let start = start.unwrap_or(0);
+        let end = end.unwrap_or(self.range.end - self.range.start);
 
-impl<'a, 'b, P: Fn(char) -> bool> LineSplit<'a, 'b, P> {
-    /// Gets the next split element, ignoring the `merge` option.
-    fn next_nomerge(&mut self) -> Option<LineText<'b>> {
-        let next_char = match self.next_char {
-            Some(c) => c,
-            None => return None,
-        };
-
-        let remaining = &self.line_text.get_text()[next_char..];
-        match remaining.find(|c| (self.pattern)(c)) {
-            None => {
-                // The whole rest of the string is one block, or we've
-                // reached the end of the string.
-                self.next_char = None;
-
-                Some(LineText {
-                    range: self.line_text.range.start + next_char..self.line_text.range.end,
-                    ..*self.line_text
-                })
-            }
-            Some(idx) => {
-                self.next_char = Some(next_char + idx + 1);
-                Some(LineText {
-                    // TODO: prove this won't go over the end.
-                    range: self.line_text.range.start + next_char
-                        ..self.line_text.range.start + next_char + idx,
-                    ..*self.line_text
-                })
-            }
+        Self {
+            range: self.range.start + start..self.range.start + end,
+            substring: &self.substring[start..end],
+            ..*self
         }
     }
 }
 
-impl<'a, 'b, P: Fn(char) -> bool> Iterator for LineSplit<'a, 'b, P> {
+impl<'a, P: Fn(char) -> bool> LineSplit<'a, P> {
+    /// Gets the next split element, ignoring the `merge` option.
+    fn next_nomerge(&mut self) -> Option<LineText<'a>> {
+        if self.done {
+            None
+        } else {
+            Some(match self.line_text.substring.find(|c| (self.pattern)(c)) {
+                None => {
+                    // The whole rest of the string is one block, or
+                    // we've reached the end of the string.
+                    self.done = true;
+                    self.line_text.clone()
+                }
+                Some(idx) => {
+                    let section = self.line_text.substr(None, Some(idx));
+                    self.line_text = self.line_text.substr(Some(idx + 1), None);
+                    section
+                }
+            })
+        }
+    }
+}
+
+impl<'a, P: Fn(char) -> bool> Iterator for LineSplit<'a, P> {
     // LineSplit produces more LineTexts that are substrings of the
     // original.
-    type Item = LineText<'b>;
+    type Item = LineText<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let item = self.next_nomerge();
@@ -250,7 +235,9 @@ impl<'a, 'b, P: Fn(char) -> bool> Iterator for LineSplit<'a, 'b, P> {
             match item {
                 None => None,
                 Some(text) => {
-                    if text.get_text().len() == 0 {
+                    if text.substring.len() == 0 {
+                        // Don't return a blank substring if `merge`
+                        // is true.
                         self.next()
                     } else {
                         Some(text)
@@ -328,19 +315,20 @@ mod tests {
     #[test]
     fn split_test() {
         // Check basic functionality.
-        let text = "two words";
-        let lt = LineText {
-            file_name: "foo",
-            line_num: 10,
-            text,
-            range: 0..text.len(),
-        };
+        // let text = "two words";
+        // let lt = LineText {
+        //     file_name: "foo",
+        //     line_num: 10,
+        //     text,
+        //     range: 0..text.len(),
+        //     substring: text,
+        // };
 
-        let split: Vec<_> = lt
-            .split(char::is_whitespace, true)
-            .map(|lt| lt.get_text())
-            .collect();
-        assert_eq!(split, vec!["two", "words"]);
+        // let split: Vec<_> = lt
+        //     .split(char::is_whitespace, true)
+        //     .map(|lt| lt.substring)
+        //     .collect();
+        // assert_eq!(split, vec!["two", "words"]);
 
         // Check whether repeated delimiters are condensed properly.
         let text = " \t  with  \n  whitespace\t\t   ";
@@ -349,11 +337,12 @@ mod tests {
             line_num: 10,
             text,
             range: 0..text.len(),
+            substring: text,
         };
 
         let split: Vec<_> = lt
             .split(char::is_whitespace, true)
-            .map(|lt| lt.get_text())
+            .map(|lt| lt.substring)
             .collect();
         assert_eq!(split, vec!["with", "whitespace"]);
     }
@@ -366,12 +355,13 @@ mod tests {
             line_num: 10,
             text,
             range: 0..text.len(),
+            substring: text,
         };
 
         // Check normal function.
         let success = lt.split1(char::is_whitespace, "Expected space").unwrap();
-        let left = success.0.get_text();
-        let right = success.1.get_text();
+        let left = success.0.substring;
+        let right = success.1.substring;
         assert_eq!((left, right), ("actually", "three words"));
 
         // Check for exceptional cases.

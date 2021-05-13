@@ -93,7 +93,7 @@ impl<'a> TryFrom<LineText<'a>> for Key {
 impl ModField {
     /// Attempts to add a modifier key with the given name.
     fn add(&mut self, modifier: &LineText<'_>) -> Result<(), SyntaxError> {
-        let text = modifier.get_text();
+        let text = modifier.substring;
         match text {
             // Case-sensitive short names.
             "C" => self.mod_control = true,
@@ -115,7 +115,7 @@ impl ModField {
                         line: modifier.text.to_string(),
                         line_num: modifier.line_num,
                         col_num: modifier.range.start,
-                        len: modifier.get_text().len(),
+                        len: modifier.substring.len(),
                     })
                 }
             },
@@ -129,21 +129,21 @@ impl<'a> TryFrom<LineText<'a>> for Keysym {
     type Error = SyntaxError;
 
     fn try_from(text: LineText<'a>) -> Result<Self, Self::Error> {
-        let record = match text.get_text().len() {
+        let record = match text.substring.len() {
             // len is 1, so we must have a zeroth character, so unwrap
             // is OK here.
-            1 => lookup_by_codepoint(text.get_text().chars().next().unwrap()),
-            _ => lookup_by_name(text.get_text()),
+            1 => lookup_by_codepoint(text.substring.chars().next().unwrap()),
+            _ => lookup_by_name(text.substring),
         };
 
         match record {
             Some(record) => Ok(Self(record.keysym)),
             None => Err(SyntaxError {
-                err_msg: format!("Invalid keysym \"{}\"", text.get_text()),
+                err_msg: format!("Invalid keysym \"{}\"", text.substring),
                 line: text.text.to_string(),
                 line_num: text.line_num,
                 col_num: text.range.start,
-                len: text.get_text().len(),
+                len: text.substring.len(),
             }),
         }
     }
@@ -161,6 +161,7 @@ mod tests {
             line_num: 10,
             text,
             range: 0..text.len(),
+            substring: text,
         }
     }
 

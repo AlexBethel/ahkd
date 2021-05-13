@@ -21,6 +21,7 @@ use std::fs::File;
 use std::io::BufReader;
 
 mod cfgfile;
+mod keyseq;
 
 use cfgfile::parse_config;
 

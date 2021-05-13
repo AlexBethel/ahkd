@@ -8,3 +8,4 @@ edition = "2018"
 # https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+x11-keysymdef = "0.2.0"    # Convert among X11 keysyms, unicodes, and string names

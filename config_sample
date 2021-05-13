@@ -5,31 +5,31 @@
 # because it's just meant to illustrate the program's capabilities).
 
 # Simple bindings from single keys to programs.
-bind alt-f :: firefox
+bind alt-f : firefox
 
 # Specify more than one key in a key sequence by just writing them
 # separated by spaces. Here, the user must type alt-l, then control-o
 # in that order and with no intervening keystrokes to run the key
 # binding.
-bind alt-l ctrl-g :: gedit
+bind alt-l ctrl-g : gedit
 
 # You can use multi-key sequences with the same prefix to effectively
 # increase the number of key combinations possible to use on a
 # keyboard.
-bind alt-l e :: kitty
+bind alt-l e : kitty
 
 # Translate key combinations into other keys.
-map ctrl-a :: Home
-map ctrl-e :: End
+map ctrl-a : Home
+map ctrl-e : End
 
 # A couple of different syntaxes are supported for writing the names
 # of keys.
-map C-f :: Right
-map Control+b :: Left
+map C-f : Right
+map Control+b : Left
 
 # We can also apply modifiers to the right side of a `map' command.
-map alt-f :: ctrl-Right
-map alt-b :: ctrl-Left
+map alt-f : ctrl-Right
+map alt-b : ctrl-Left
 
 # Or we can put multiple keystrokes there.
-map ctrl-k :: shift-Right ctrl-x
+map ctrl-k : shift-Right ctrl-x

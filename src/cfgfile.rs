@@ -183,7 +183,7 @@ impl<'a> LineText<'a> {
 
             // Highlight the last character if an error occurs.
             None => Err(self
-                .substr(Some(self.substring.len() - 1), None)
+                .substr(Some(self.substring.len()), None)
                 .to_error(err_msg.to_string())),
         }
     }
@@ -228,7 +228,10 @@ impl<'a> LineText<'a> {
             line: self.text.to_string(),
             line_num: self.line_num,
             col_num: self.range.start,
-            len: self.substring.len(),
+            // Sometimes we can end up with a len of 0; extend it to 1
+            // if that's the case, because the user won't be able to
+            // see an underline that's 0 characters wide.
+            len: self.substring.len().max(1),
         }
     }
 }
@@ -240,6 +243,12 @@ impl<'a> AsRef<str> for LineText<'a> {
 }
 
 impl<'a, P: Fn(char) -> bool> LineSplit<'a, P> {
+    /// Gets the text that has not yet been examined by the
+    /// `LineSplit`.
+    pub fn rest(self) -> LineText<'a> {
+        self.line_text
+    }
+
     /// Gets the next split element, ignoring the `merge` option.
     fn next_nomerge(&mut self) -> Option<LineText<'a>> {
         if self.done {
@@ -250,7 +259,11 @@ impl<'a, P: Fn(char) -> bool> LineSplit<'a, P> {
                     // The whole rest of the string is one block, or
                     // we've reached the end of the string.
                     self.done = true;
-                    self.line_text.clone()
+                    let section = self.line_text.clone();
+                    self.line_text = self
+                        .line_text
+                        .substr(Some(self.line_text.substring.len()), None);
+                    section
                 }
                 Some(idx) => {
                     let section = self.line_text.substr(None, Some(idx));
@@ -320,13 +333,15 @@ fn parse_command<'a>(line: LineText<'a>) -> Result<Option<Command>, SyntaxError>
         Some(_) => {}
     }
 
+    let mut split = trimmed.split(char::is_whitespace, true);
+
     // After trimming the command we got a character at the start,
     // therefore we must logically have at least one word.
-    let first_word = trimmed.split(|c| c == ' ', true).next().unwrap();
+    let first_word = split.next().unwrap();
 
     match first_word.as_ref() {
-        "bind" => parse_cmd_bind(trimmed),
-        "map" => parse_cmd_map(trimmed),
+        "bind" => parse_cmd_bind(split.rest()),
+        "map" => parse_cmd_map(split.rest()),
         _ => {
             let errmsg = format!("Unrecognized command \"{}\"", first_word.as_ref());
             Err(first_word.to_error(errmsg))
@@ -334,12 +349,12 @@ fn parse_command<'a>(line: LineText<'a>) -> Result<Option<Command>, SyntaxError>
     }
 }
 
-fn parse_cmd_bind<'a>(line: LineText<'a>) -> Result<Option<Command>, SyntaxError> {
-    Err(line.to_error("Not implemented".to_string()))
+fn parse_cmd_bind<'a>(args: LineText<'a>) -> Result<Option<Command>, SyntaxError> {
+    Err(args.to_error("Not implemented".to_string()))
 }
 
-fn parse_cmd_map<'a>(line: LineText<'a>) -> Result<Option<Command>, SyntaxError> {
-    Err(line.to_error("Not implemented".to_string()))
+fn parse_cmd_map<'a>(args: LineText<'a>) -> Result<Option<Command>, SyntaxError> {
+    Err(args.to_error("Not implemented".to_string()))
 }
 
 #[cfg(test)]

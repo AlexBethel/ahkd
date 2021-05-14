@@ -169,29 +169,22 @@ impl<'a> LineText<'a> {
     /// Splits the LineText at the first occurrence of a character
     /// that satisfies `pattern`. If one is found, returns the text
     /// before that character and the text after it; otherwise,
-    /// returns None.
+    /// returns a syntax error with the given error message.
     pub fn split1<P: Fn(char) -> bool>(
         &self,
         pattern: P,
         err_msg: &str,
     ) -> Result<(LineText<'a>, LineText<'a>), SyntaxError> {
-        let remaining = &self.text[self.range.clone()];
-        match remaining.find(|c| pattern(c)) {
+        match self.substring.find(pattern) {
             Some(split_idx) => Ok((
                 self.substr(None, Some(split_idx)),
                 self.substr(Some(split_idx + 1), None),
             )),
-            None => {
-                // TODO: turn this into to_error.
-                Err(SyntaxError {
-                    err_msg: err_msg.to_string(),
-                    line: self.text.to_string(),
-                    line_num: self.line_num,
-                    // Highlight the last character of the LineText.
-                    col_num: self.range.end,
-                    len: 1,
-                })
-            }
+
+            // Highlight the last character if an error occurs.
+            None => Err(self
+                .substr(Some(self.substring.len() - 1), None)
+                .to_error(err_msg.to_string())),
         }
     }
 
@@ -200,7 +193,7 @@ impl<'a> LineText<'a> {
         let idx = self
             .substring
             .find(|c: char| !c.is_whitespace())
-            .unwrap_or(self.substring.len());
+            .unwrap_or_else(|| self.substring.len());
         self.substr(Some(idx), None)
     }
 
@@ -209,7 +202,16 @@ impl<'a> LineText<'a> {
     /// `end` is None, uses the end of the string.
     pub fn substr(&self, start: Option<usize>, end: Option<usize>) -> Self {
         let start = start.unwrap_or(0);
-        let end = end.unwrap_or(self.range.end - self.range.start);
+        let end = end.unwrap_or_else(|| self.range.end - self.range.start);
+
+        if end > self.range.end - self.range.start {
+            panic!(
+                "Invalid LineText substring {}..{} (string is only {} characters long)",
+                start,
+                end,
+                self.range.end - self.range.start
+            );
+        }
 
         Self {
             range: self.range.start + start..self.range.start + end,
@@ -347,20 +349,20 @@ mod tests {
     #[test]
     fn split_test() {
         // Check basic functionality.
-        // let text = "two words";
-        // let lt = LineText {
-        //     file_name: "foo",
-        //     line_num: 10,
-        //     text,
-        //     range: 0..text.len(),
-        //     substring: text,
-        // };
+        let text = "two words";
+        let lt = LineText {
+            file_name: "foo",
+            line_num: 10,
+            text,
+            range: 0..text.len(),
+            substring: text,
+        };
 
-        // let split: Vec<_> = lt
-        //     .split(char::is_whitespace, true)
-        //     .map(|lt| lt.substring)
-        //     .collect();
-        // assert_eq!(split, vec!["two", "words"]);
+        let split: Vec<_> = lt
+            .split(char::is_whitespace, true)
+            .map(|lt| lt.substring)
+            .collect();
+        assert_eq!(split, vec!["two", "words"]);
 
         // Check whether repeated delimiters are condensed properly.
         let text = " \t  with  \n  whitespace\t\t   ";

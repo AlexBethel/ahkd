@@ -17,6 +17,7 @@
 // along with ahkd. If not, see <https://www.gnu.org/licenses/>.
 
 use crate::keyseq::KeySequence;
+use std::convert::TryInto;
 use std::error::Error;
 use std::fmt;
 use std::io::{BufRead, BufReader, Read};
@@ -339,22 +340,34 @@ fn parse_command<'a>(line: LineText<'a>) -> Result<Option<Command>, SyntaxError>
     // therefore we must logically have at least one word.
     let first_word = split.next().unwrap();
 
-    match first_word.as_ref() {
+    Ok(Some(match first_word.as_ref() {
         "bind" => parse_cmd_bind(split.rest()),
         "map" => parse_cmd_map(split.rest()),
         _ => {
             let errmsg = format!("Unrecognized command \"{}\"", first_word.as_ref());
             Err(first_word.to_error(errmsg))
         }
-    }
+    }?))
 }
 
-fn parse_cmd_bind<'a>(args: LineText<'a>) -> Result<Option<Command>, SyntaxError> {
-    Err(args.to_error("Not implemented".to_string()))
+fn parse_cmd_bind<'a>(args: LineText<'a>) -> Result<Command, SyntaxError> {
+    let (keys, command) = args.split1(|c| c == ':', "Expected \":\"")?;
+    Ok(Command::Bind {
+        keybinding: keys.try_into()?,
+        command: command
+            .as_ref()
+            .split_ascii_whitespace()
+            .map(|s| s.to_string())
+            .collect(),
+    })
 }
 
-fn parse_cmd_map<'a>(args: LineText<'a>) -> Result<Option<Command>, SyntaxError> {
-    Err(args.to_error("Not implemented".to_string()))
+fn parse_cmd_map<'a>(args: LineText<'a>) -> Result<Command, SyntaxError> {
+    let (from, to) = args.split1(|c| c == ':', "Expected \":\"")?;
+    Ok(Command::Map {
+        from: from.try_into()?,
+        to: to.try_into()?,
+    })
 }
 
 #[cfg(test)]

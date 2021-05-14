@@ -68,7 +68,7 @@ impl<'a> TryFrom<LineText<'a>> for Key {
     type Error = SyntaxError;
 
     fn try_from(text: LineText<'a>) -> Result<Self, Self::Error> {
-        let subkeys: Vec<_> = text.split(|c| c == '-' || c == '+', false).collect();
+        let mut subkeys: Vec<_> = text.split(|c| c == '-' || c == '+', false).collect();
         let mut modifiers = ModField {
             mod_shift: false,
             mod_control: false,
@@ -79,12 +79,17 @@ impl<'a> TryFrom<LineText<'a>> for Key {
             mod5: false,
         };
 
-        for modifier in &subkeys[0..subkeys.len() - 1] {
+        // This can only fail if `text` is of length 0, which is
+        // impossible because we're only called from
+        // KeySequence::try_from, which uses LineText::split with
+        // `merge = true`, which never emits blank LineTexts.
+        let last = subkeys.pop().unwrap();
+        for modifier in subkeys.into_iter() {
             modifiers.add(modifier)?;
         }
 
         Ok(Self {
-            main_key: subkeys[subkeys.len() - 1].clone().try_into()?,
+            main_key: last.try_into()?,
             modifiers,
         })
     }
@@ -92,8 +97,8 @@ impl<'a> TryFrom<LineText<'a>> for Key {
 
 impl ModField {
     /// Attempts to add a modifier key with the given name.
-    fn add(&mut self, modifier: &LineText<'_>) -> Result<(), SyntaxError> {
-        let text = modifier.substring;
+    fn add(&mut self, modifier: LineText<'_>) -> Result<(), SyntaxError> {
+        let text = modifier.as_ref();
         match text {
             // Case-sensitive short names.
             "C" => self.mod_control = true,
@@ -110,13 +115,8 @@ impl ModField {
                 "shift" => self.mod_shift = true,
                 "hyper" => self.mod4 = true,
                 _ => {
-                    return Err(SyntaxError {
-                        err_msg: format!("Invalid modifier \"{}\"", text),
-                        line: modifier.text.to_string(),
-                        line_num: modifier.line_num,
-                        col_num: modifier.range.start,
-                        len: modifier.substring.len(),
-                    })
+                    let errmsg = format!("Invalid modifier \"{}\"", text);
+                    return Err(modifier.to_error(errmsg));
                 }
             },
         }
@@ -129,22 +129,19 @@ impl<'a> TryFrom<LineText<'a>> for Keysym {
     type Error = SyntaxError;
 
     fn try_from(text: LineText<'a>) -> Result<Self, Self::Error> {
-        let record = match text.substring.len() {
+        let record = match (text.as_ref()).len() {
             // len is 1, so we must have a zeroth character, so unwrap
             // is OK here.
-            1 => lookup_by_codepoint(text.substring.chars().next().unwrap()),
-            _ => lookup_by_name(text.substring),
+            1 => lookup_by_codepoint(text.as_ref().chars().next().unwrap()),
+            _ => lookup_by_name(text.as_ref()),
         };
 
         match record {
             Some(record) => Ok(Self(record.keysym)),
-            None => Err(SyntaxError {
-                err_msg: format!("Invalid keysym \"{}\"", text.substring),
-                line: text.text.to_string(),
-                line_num: text.line_num,
-                col_num: text.range.start,
-                len: text.substring.len(),
-            }),
+            None => {
+                let errmsg = format!("Invalid keysym \"{}\"", text.as_ref());
+                Err(text.to_error(errmsg))
+            }
         }
     }
 }
@@ -156,13 +153,7 @@ mod tests {
     /// Constructs a LineText from the given string, using some
     /// template values for testing.
     fn mk_lt<'a>(text: &'a str) -> LineText<'a> {
-        LineText {
-            file_name: "foo.txt",
-            line_num: 10,
-            text,
-            range: 0..text.len(),
-            substring: text,
-        }
+        LineText::new("foo.txt", 10, text)
     }
 
     #[test]

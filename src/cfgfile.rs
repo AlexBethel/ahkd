@@ -19,8 +19,7 @@
 use crate::keyseq::KeySequence;
 use std::error::Error;
 use std::fmt;
-use std::io::Read;
-use std::io::{BufRead, BufReader};
+use std::io::{Read, BufRead, BufReader};
 use std::ops::Range;
 
 /// The information from the configuration file.
@@ -48,24 +47,22 @@ pub enum Command {
 /// A substring of a line of text obtained from an input file.
 #[derive(Clone, PartialEq, Debug)]
 pub struct LineText<'a> {
-    // TODO: once SyntaxError has one of these, we don't need these to
-    // be public.
     /// The name of the file from which the text originated.
-    pub file_name: &'a str,
+    file_name: &'a str,
 
     /// The line number of the text.
-    pub line_num: usize,
+    line_num: usize,
 
     /// The text of the complete line.
-    pub text: &'a str,
+    text: &'a str,
 
     /// The range of characters delimiting the substring.
-    pub range: Range<usize>,
+    range: Range<usize>,
 
     /// The value of `text[range]`, i.e., another pointer into `text`.
     /// This value takes O(n) to compute because of unicode, so we
     /// cache it here and can therefore fetch it in O(1).
-    pub substring: &'a str,
+    substring: &'a str,
 }
 
 /// Iterator over the sections in a line of text separated by some
@@ -90,24 +87,23 @@ pub struct LineSplit<'a, P: Fn(char) -> bool> {
 /// An error arising from parsing.
 #[derive(Debug)]
 pub struct SyntaxError {
-    // TODO: Build this structure around LineText.
     /// The error message to print.
-    pub err_msg: String,
+    err_msg: String,
 
     /// The text of the line on which the error occurred.
-    pub line: String,
+    line: String,
 
     /// The line number (starting from 1) on which the error occurred.
-    pub line_num: usize,
+    line_num: usize,
 
     /// The column number (starting from 0) of the first erroneous
     /// character.
-    pub col_num: usize,
+    col_num: usize,
 
     /// The number of characters past `col_num` to indicate as
     /// erroneous in an error message. This should always be at least
     /// one.
-    pub len: usize,
+    len: usize,
 }
 
 impl fmt::Display for SyntaxError {
@@ -137,7 +133,7 @@ impl fmt::Display for SyntaxError {
         // writeln!(f, "")?;
 
         // And then the actual message.
-        write!(f, "{}   {}", " ".repeat(margin), self.err_msg)?;
+        write!(f, "{}", self.err_msg)?;
         Ok(())
     }
 }
@@ -145,6 +141,18 @@ impl fmt::Display for SyntaxError {
 impl Error for SyntaxError {}
 
 impl<'a> LineText<'a> {
+    /// Creates a new LineText given the name of the source file, the
+    /// line number, and the text of that line.
+    pub fn new(file_name: &'a str, line_num: usize, text: &'a str) -> Self {
+        Self {
+            file_name,
+            line_num,
+            text,
+            range: 0..text.len(),
+            substring: text,
+        }
+    }
+
     /// Splits the LineText at each occurrence of a character that
     /// satisfies `pattern`. If `merge` is true, merges multiple
     /// instances of the pattern into one, thereby never emitting a
@@ -171,8 +179,8 @@ impl<'a> LineText<'a> {
         match remaining.find(|c| pattern(c)) {
             Some(split_idx) => Ok((
                 self.substr(None, Some(split_idx)),
-                self.substr(Some(split_idx + 1), None))
-            ),
+                self.substr(Some(split_idx + 1), None),
+            )),
             None => {
                 Err(SyntaxError {
                     err_msg: err_msg.to_string(),
@@ -198,6 +206,24 @@ impl<'a> LineText<'a> {
             substring: &self.substring[start..end],
             ..*self
         }
+    }
+
+    /// Converts the LineText into a SyntaxError that highlights this
+    /// portion of the line, with the given error message.
+    pub fn to_error(self, msg: String) -> SyntaxError {
+        SyntaxError {
+            err_msg: msg,
+            line: self.text.to_string(),
+            line_num: self.line_num,
+            col_num: self.range.start,
+            len: self.substring.len(),
+        }
+    }
+}
+
+impl<'a> AsRef<str> for LineText<'a> {
+    fn as_ref(&self) -> &str {
+        self.substring
     }
 }
 

@@ -314,7 +314,7 @@ pub fn parse_config<T: Read>(
         let idx = idx + 1;
         let line = line?;
 
-        if let Some(command) = parse_command(LineText::new(file_name, idx + 1, &line))? {
+        if let Some(command) = parse_command(LineText::new(file_name, idx, &line))? {
             commands.push(command);
         }
     }

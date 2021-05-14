@@ -19,7 +19,7 @@
 use crate::keyseq::KeySequence;
 use std::error::Error;
 use std::fmt;
-use std::io::{Read, BufRead, BufReader};
+use std::io::{BufRead, BufReader, Read};
 use std::ops::Range;
 
 /// The information from the configuration file.
@@ -182,6 +182,7 @@ impl<'a> LineText<'a> {
                 self.substr(Some(split_idx + 1), None),
             )),
             None => {
+                // TODO: turn this into to_error.
                 Err(SyntaxError {
                     err_msg: err_msg.to_string(),
                     line: self.text.to_string(),
@@ -192,6 +193,15 @@ impl<'a> LineText<'a> {
                 })
             }
         }
+    }
+
+    /// Removes leading whitespace from the LineText.
+    pub fn trim_start(&self) -> Self {
+        let idx = self
+            .substring
+            .find(|c: char| !c.is_whitespace())
+            .unwrap_or(self.substring.len());
+        self.substr(Some(idx), None)
     }
 
     /// Takes a substring of a LineText, between the two indices. If
@@ -277,12 +287,18 @@ impl<'a, P: Fn(char) -> bool> Iterator for LineSplit<'a, P> {
 }
 
 /// Parses a configuration file from an input source.
-pub fn parse_config<T: Read>(reader: BufReader<T>) -> Result<Config, Box<dyn Error>> {
+pub fn parse_config<T: Read>(
+    reader: BufReader<T>,
+    file_name: &str,
+) -> Result<Config, Box<dyn Error>> {
     let mut commands = Vec::new();
     for (idx, line) in reader.lines().enumerate() {
         // For some reason, line numbers have always started at 1, not
         // 0, so we get to add 1 here.
-        if let Some(command) = parse_command(line?, idx + 1)? {
+        let idx = idx + 1;
+        let line = line?;
+
+        if let Some(command) = parse_command(LineText::new(file_name, idx + 1, &line))? {
             commands.push(command);
         }
     }
@@ -290,12 +306,11 @@ pub fn parse_config<T: Read>(reader: BufReader<T>) -> Result<Config, Box<dyn Err
     Ok(Config { commands })
 }
 
-/// Attempts to parse the string (which was found at the given line
-/// number) as a configuration command. Returns Ok(None) if the line
-/// was blank or a comment.
-fn parse_command(command: String, line: usize) -> Result<Option<Command>, SyntaxError> {
-    let trimmed = command.trim_start();
-    match trimmed.chars().next() {
+/// Attempts to parse the line of text as a configuration command.
+/// Returns Ok(None) if the line was blank or a comment.
+fn parse_command<'a>(line: LineText<'a>) -> Result<Option<Command>, SyntaxError> {
+    let trimmed = line.trim_start();
+    match trimmed.as_ref().chars().next() {
         None | Some('#') => {
             // Blank line or comment.
             return Ok(None);
@@ -305,33 +320,24 @@ fn parse_command(command: String, line: usize) -> Result<Option<Command>, Syntax
 
     // After trimming the command we got a character at the start,
     // therefore we must logically have at least one word.
-    let first_word = trimmed.split(' ').next().unwrap();
+    let first_word = trimmed.split(|c| c == ' ', true).next().unwrap();
 
-    match first_word {
-        "bind" => parse_cmd_bind(trimmed.to_string(), line),
-        "map" => parse_cmd_map(trimmed.to_string(), line),
+    match first_word.as_ref() {
+        "bind" => parse_cmd_bind(trimmed),
+        "map" => parse_cmd_map(trimmed),
         _ => {
-            let len = first_word.len();
-            let indentation = command.len() - trimmed.len();
-            Err(SyntaxError {
-                err_msg: format!("Unrecognized command \"{}\"", first_word),
-                line: command,
-                line_num: line,
-                col_num: indentation,
-                len,
-            })
+            let errmsg = format!("Unrecognized command \"{}\"", first_word.as_ref());
+            Err(first_word.to_error(errmsg))
         }
     }
 }
 
-fn parse_cmd_bind(command: String, line: usize) -> Result<Option<Command>, SyntaxError> {
-    println!("bind ({}): {}", line, command);
-    todo!();
+fn parse_cmd_bind<'a>(line: LineText<'a>) -> Result<Option<Command>, SyntaxError> {
+    Err(line.to_error("Not implemented".to_string()))
 }
 
-fn parse_cmd_map(command: String, line: usize) -> Result<Option<Command>, SyntaxError> {
-    println!("map ({}): {}", line, command);
-    todo!();
+fn parse_cmd_map<'a>(line: LineText<'a>) -> Result<Option<Command>, SyntaxError> {
+    Err(line.to_error("Not implemented".to_string()))
 }
 
 #[cfg(test)]

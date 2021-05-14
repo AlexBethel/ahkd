@@ -49,7 +49,7 @@ fn run() -> Result<(), Box<dyn Error>> {
 
     let config_file = File::open(config_name)?;
     let config_buf = BufReader::new(config_file);
-    let config = parse_config(config_buf)?;
+    let config = parse_config(config_buf, &config_name)?;
 
     println!("{:?}", config);
     Ok(())

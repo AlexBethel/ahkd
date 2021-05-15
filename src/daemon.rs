@@ -16,21 +16,22 @@
 // You should have received a copy of the GNU General Public License
 // along with ahkd. If not, see <https://www.gnu.org/licenses/>.
 
-use crate::keyseq::KeySequence;
+use crate::cfgfile::Action;
 use crate::cfgfile::Config;
 use crate::cfgfile::ConfigLine;
 use crate::keyseq::Key;
+use crate::keyseq::KeySequence;
 use crate::x11::X11Conn;
 use crate::AhkdError;
+use std::collections::HashSet;
 use std::convert::Infallible;
 use std::error::Error;
-use std::collections::HashSet;
 
 /// Runs the daemon with the given configuration..
 pub fn daemon(cfg: Config) -> Result<Infallible, Box<dyn Error>> {
-    let _connection = X11Conn::new()?;
+    let conn = X11Conn::new()?;
     loop {
-        let _init_keys = match get_prefixes(&cfg, &Vec::new()) {
+        let init_keys = match get_prefixes(&cfg, &[]) {
             PrefixState::None => return Err(Box::new(AhkdError::NoKeysError)),
             PrefixState::Match(_) => {
                 // TODO: Guarantee that this is true.
@@ -39,8 +40,29 @@ pub fn daemon(cfg: Config) -> Result<Infallible, Box<dyn Error>> {
             PrefixState::Prefix(keys) => keys,
         };
 
-        todo!();
+        let mut seen_keys = vec![conn.next_key(&init_keys)?];
+        loop {
+            match get_prefixes(&cfg, &seen_keys) {
+                PrefixState::None => {
+                    break;
+                }
+                PrefixState::Prefix(_keys) => {
+                    // Do nothing. TODO: we don't need that `_keys`
+                    // variable there, get rid of it.
+                }
+                PrefixState::Match(line) => {
+                    do_action(&line.action);
+                    break;
+                }
+            }
+
+            seen_keys.push(conn.next_key_kbd()?);
+        }
     }
+}
+
+fn do_action(_action: &Action) {
+    todo!();
 }
 
 /// The state of the keybinding manager at a particular point in time.
@@ -83,7 +105,9 @@ fn get_prefixes<'a>(config: &'a Config, seen_keys: &[Key]) -> PrefixState<'a> {
     for command in &config.commands {
         match match_keyseq(&command.keyseq, seen_keys) {
             SeqMatch::None => {}
-            SeqMatch::Partial(key) => {next_keys.insert(key);},
+            SeqMatch::Partial(key) => {
+                next_keys.insert(key);
+            }
             SeqMatch::Full => return PrefixState::Match(&command),
         };
     }

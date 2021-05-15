@@ -103,14 +103,15 @@ impl X11Conn {
     fn keysym_to_keycode(&self, keysym: Keysym) -> u8 {
         // TODO: do this better. This is O(n) in time.
         // TODO: deal with missing keysyms.
-        let keysym_idx: u8 = (*self
+        let keysym_idx = self
             .keymap
             .keysyms
             .iter()
-            .find(|&&x| x == keysym.0)
-            .unwrap())
-        .try_into()
-        .unwrap();
+            .position(|&x| x == keysym.0)
+            .unwrap();
+        let keysym_idx: u8 = keysym_idx.try_into().unwrap();
+        println!("keysyms_per_keycode = {}", self.keymap.keysyms_per_keycode);
+        println!("min_keycode = {}", self.min_keycode);
         keysym_idx / self.keymap.keysyms_per_keycode as u8 + self.min_keycode
     }
 

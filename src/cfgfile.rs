@@ -27,22 +27,50 @@ use std::ops::Range;
 #[derive(Debug)]
 pub struct Config {
     /// The set of commands specified in the file.
-    pub commands: Vec<Command>,
+    pub commands: Vec<ConfigLine>,
 }
+
+// /// A functional line in the configuration file.
+// #[derive(Debug)]
+// pub enum Command {
+//     /// A `bind` command, indicating that a particular key sequence
+//     /// should run a shell command.
+//     Bind {
+//         keybinding: KeySequence,
+//         command: Vec<String>,
+//     },
+
+//     /// A `map` command, indicating that a key sequence should trigger
+//     /// another key sequence.
+//     Map { from: KeySequence, to: KeySequence },
+// }
 
 /// A functional line in the configuration file.
 #[derive(Debug)]
-pub enum Command {
+pub struct ConfigLine {
+    /// The key sequence that must be pressed to trigger the action.
+    pub keyseq: KeySequence,
+
+    /// The action that will occur when that key sequence is pressed.
+    pub action: Action,
+}
+
+/// An action implied by a configuration line.
+#[derive(Debug)]
+pub enum Action {
     /// A `bind` command, indicating that a particular key sequence
     /// should run a shell command.
     Bind {
-        keybinding: KeySequence,
+        /// The shell command to execute.
         command: Vec<String>,
     },
 
     /// A `map` command, indicating that a key sequence should trigger
     /// another key sequence.
-    Map { from: KeySequence, to: KeySequence },
+    Map {
+        /// The KeySequence to trigger.
+        to: KeySequence,
+    },
 }
 
 /// A substring of a line of text obtained from an input file.
@@ -91,6 +119,9 @@ pub struct SyntaxError {
     /// The error message to print.
     err_msg: String,
 
+    /// The file from which the error originated.
+    file_name: String,
+
     /// The text of the line on which the error occurred.
     line: String,
 
@@ -112,7 +143,11 @@ impl fmt::Display for SyntaxError {
         let margin = 4;
 
         // Declare we have a syntax error.
-        writeln!(f, "Syntax error:")?;
+        writeln!(
+            f,
+            "Syntax error: {}:{}:{}",
+            self.file_name, self.line_num, self.col_num
+        )?;
 
         // Draw the offending line next to its line number, with the
         // erroneous section underlined.
@@ -226,6 +261,7 @@ impl<'a> LineText<'a> {
     pub fn to_error(self, msg: String) -> SyntaxError {
         SyntaxError {
             err_msg: msg,
+            file_name: self.file_name.to_string(),
             line: self.text.to_string(),
             line_num: self.line_num,
             col_num: self.range.start,
@@ -324,7 +360,7 @@ pub fn parse_config<T: Read>(
 
 /// Attempts to parse the line of text as a configuration command.
 /// Returns Ok(None) if the line was blank or a comment.
-fn parse_command<'a>(line: LineText<'a>) -> Result<Option<Command>, SyntaxError> {
+fn parse_command<'a>(line: LineText<'a>) -> Result<Option<ConfigLine>, SyntaxError> {
     let trimmed = line.trim_start();
     match trimmed.as_ref().chars().next() {
         None | Some('#') => {
@@ -350,23 +386,27 @@ fn parse_command<'a>(line: LineText<'a>) -> Result<Option<Command>, SyntaxError>
     }?))
 }
 
-fn parse_cmd_bind<'a>(args: LineText<'a>) -> Result<Command, SyntaxError> {
+fn parse_cmd_bind<'a>(args: LineText<'a>) -> Result<ConfigLine, SyntaxError> {
     let (keys, command) = args.split1(|c| c == ':', "Expected \":\"")?;
-    Ok(Command::Bind {
-        keybinding: keys.try_into()?,
-        command: command
-            .as_ref()
-            .split_ascii_whitespace()
-            .map(|s| s.to_string())
-            .collect(),
+    Ok(ConfigLine {
+        keyseq: keys.try_into()?,
+        action: Action::Bind {
+            command: command
+                .as_ref()
+                .split_ascii_whitespace()
+                .map(|s| s.to_string())
+                .collect(),
+        },
     })
 }
 
-fn parse_cmd_map<'a>(args: LineText<'a>) -> Result<Command, SyntaxError> {
+fn parse_cmd_map<'a>(args: LineText<'a>) -> Result<ConfigLine, SyntaxError> {
     let (from, to) = args.split1(|c| c == ':', "Expected \":\"")?;
-    Ok(Command::Map {
-        from: from.try_into()?,
-        to: to.try_into()?,
+    Ok(ConfigLine {
+        keyseq: from.try_into()?,
+        action: Action::Map {
+            to: to.try_into()?,
+        }
     })
 }
 

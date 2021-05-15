@@ -19,6 +19,7 @@
 use crate::cfgfile::{LineText, SyntaxError};
 use std::convert::{TryFrom, TryInto};
 use x11_keysymdef::{lookup_by_codepoint, lookup_by_name};
+use std::hash::{Hash, Hasher};
 
 /// A sequence of keys that might be pressed. This type represents the
 /// selector of the `map` and `bind` commands, and the target of the
@@ -35,8 +36,18 @@ pub struct Key {
     pub main_key: Keysym,
 }
 
+impl Hash for Key {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.modifiers.hash(state);
+
+        // `Keysym` isn't Hash, so we get to hash its component
+        // instead (which slightly annoys me).
+        self.main_key.0.hash(state);
+    }
+}
+
 /// A set of modifiers that might be applied to a key.
-#[derive(PartialEq, Eq, Debug, Clone, Copy)]
+#[derive(PartialEq, Eq, Debug, Clone, Copy, Hash)]
 pub struct ModField {
     pub mod_shift: bool,
     pub mod_control: bool,

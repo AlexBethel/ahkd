@@ -9,3 +9,4 @@ edition = "2018"
 
 [dependencies]
 x11-keysymdef = "0.2.0"    # Convert among X11 keysyms, unicodes, and string names
+x11rb = "0.8.1"            # Rust bindings to X11

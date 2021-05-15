@@ -109,17 +109,18 @@ impl X11Conn {
             .iter()
             .position(|&x| x == keysym.0)
             .unwrap();
-        let keysym_idx: u8 = keysym_idx.try_into().unwrap();
         println!("keysyms_per_keycode = {}", self.keymap.keysyms_per_keycode);
         println!("min_keycode = {}", self.min_keycode);
-        keysym_idx / self.keymap.keysyms_per_keycode as u8 + self.min_keycode
+        ((keysym_idx / self.keymap.keysyms_per_keycode as usize) + self.min_keycode as usize)
+            .try_into()
+            .unwrap()
     }
 
     /// Gets the first keysym corresponding to a keycode.
     fn keycode_to_keysym(&self, keycode: u8) -> Keysym {
         Keysym(
             self.keymap.keysyms
-                [((keycode - self.min_keycode) * self.keymap.keysyms_per_keycode) as usize],
+                [(keycode - self.min_keycode) as usize * self.keymap.keysyms_per_keycode as usize],
         )
     }
 

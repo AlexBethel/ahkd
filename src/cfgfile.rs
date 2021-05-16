@@ -30,21 +30,6 @@ pub struct Config {
     pub commands: Vec<ConfigLine>,
 }
 
-// /// A functional line in the configuration file.
-// #[derive(Debug)]
-// pub enum Command {
-//     /// A `bind` command, indicating that a particular key sequence
-//     /// should run a shell command.
-//     Bind {
-//         keybinding: KeySequence,
-//         command: Vec<String>,
-//     },
-
-//     /// A `map` command, indicating that a key sequence should trigger
-//     /// another key sequence.
-//     Map { from: KeySequence, to: KeySequence },
-// }
-
 /// A functional line in the configuration file.
 #[derive(Debug)]
 pub struct ConfigLine {

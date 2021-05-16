@@ -54,8 +54,6 @@ pub struct X11Conn {
 impl X11Conn {
     /// Connects to the X11 display.
     pub fn new() -> Result<Self, Box<dyn Error>> {
-        println!("Connecting to X");
-
         // TODO: allow arbitrary X11 server names.
         let display = RustConnection::connect(None)?.0;
 
@@ -109,8 +107,7 @@ impl X11Conn {
             .iter()
             .position(|&x| x == keysym.0)
             .unwrap();
-        println!("keysyms_per_keycode = {}", self.keymap.keysyms_per_keycode);
-        println!("min_keycode = {}", self.min_keycode);
+
         ((keysym_idx / self.keymap.keysyms_per_keycode as usize) + self.min_keycode as usize)
             .try_into()
             .unwrap()
@@ -127,17 +124,9 @@ impl X11Conn {
     /// Globally grabs the given set of keys from the keybaord.
     fn grab_keys(&self, keys: &[Key]) -> Result<(), Box<dyn Error>> {
         for key in keys {
-            println!(
-                "Grabbing {:?} + {}",
-                key.main_key,
-                u16::from(&key.modifiers)
-            );
-
-            println!("Getting keycode");
             // TODO: why am I making a Keysym here?
             let keycode = self.keysym_to_keycode(Keysym(key.main_key.0));
 
-            println!("Got keycode {}", keycode);
             GrabKeyRequest {
                 owner_events: false,
                 grab_window: self.root_window,
@@ -148,8 +137,6 @@ impl X11Conn {
             }
             .send(&self.display)?
             .check()?;
-
-            println!("Grabbed");
         }
 
         Ok(())
@@ -157,8 +144,6 @@ impl X11Conn {
 
     /// Globally grabs the entire keyboard.
     fn grab_kbd(&self) -> Result<(), Box<dyn Error>> {
-        println!("Grabbing the whole keyboard");
-
         let reply = GrabKeyboardRequest {
             owner_events: false,
             grab_window: self.root_window,
@@ -170,10 +155,8 @@ impl X11Conn {
         .reply()?;
 
         if reply.status != GrabStatus::SUCCESS {
-            println!("Failed");
             Err(Box::new(AhkdError::KeyboardGrabError))
         } else {
-            println!("Grabbed");
             Ok(())
         }
     }
@@ -181,12 +164,6 @@ impl X11Conn {
     /// Ungrabs the given set of keys.
     fn ungrab_keys(&self, keys: &[Key]) -> Result<(), Box<dyn Error>> {
         for key in keys {
-            println!(
-                "Ungrabbing {:?} + {}",
-                key.main_key,
-                u16::from(&key.modifiers)
-            );
-
             UngrabKeyRequest {
                 key: self.keysym_to_keycode(Keysym(key.main_key.0)),
                 grab_window: self.root_window,
@@ -194,8 +171,6 @@ impl X11Conn {
             }
             .send(&self.display)?
             .check()?;
-
-            println!("Succeeded");
         }
 
         Ok(())
@@ -203,12 +178,9 @@ impl X11Conn {
 
     /// Ungrabs the keyboard.
     fn ungrab_kbd(&self) -> Result<(), Box<dyn Error>> {
-        println!("Ungrabbing the whole keyboard");
         UngrabKeyboardRequest { time: CURRENT_TIME }
             .send(&self.display)?
             .check()?;
-
-        println!("Ungrabbed the keyboard");
         Ok(())
     }
 
@@ -219,11 +191,7 @@ impl X11Conn {
     /// grab_kbd().
     fn get_key(&self) -> Result<Key, ConnectionError> {
         loop {
-            let e = self.display.wait_for_event()?;
-
-            println!("{:?}", e);
-
-            if let Some(key) = self.event_to_key(e) {
+            if let Some(key) = self.event_to_key(self.display.wait_for_event()?) {
                 return Ok(key);
             }
         }

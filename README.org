@@ -6,27 +6,33 @@
 
 ** Project state
 
-   - [ ] Configuration file parsing
+   - [X] Configuration file parsing
    - [-] X11 compatibility (~x11rb~)
      - [X] Key listening
      - [ ] Key synthesis
    - [ ] Wayland compatibility
      - [ ] Key listening
      - [ ] Key synthesis
-   - [ ] ~bind~ command
+   - [X] ~bind~ command
    - [ ] ~map~ command
 
 ** Usage
 
    To use ~ahkd~, the first thing you should do is create a
-   configuration file; an example file is provided in the project
-   root. Once you have done this, you can build the project using
-   ~cargo build --release~, after which you can run ~ahkd
-   <config-file-name>~ to load and execute your config file. Run ~ahkd
-   --help~ for more detailed information on program usage.
-   # TODO: document usage information here too. I would do it now but
-   # I haven't started writing the CLI yet and can't think of what
-   # options it'll need.
+   configuration file; an example file is provided in ~config_sample~.
+   Once you have done this, you can build the project using ~cargo
+   build --release~, which will place the binary in
+   ~target/release/ahkd~.
+
+   The program is invoked as ~ahkd [OPTIONS] <config-file>~, where
+   ~<config-file>~ is the name of the configuration file and
+   ~[OPTIONS]~ is any of:
+   - ~-h, --help~ to display a help string.
+   - ~-V, --version~ to print information about the program version.
+   - ~-d, --display <DISPLAY>~ to connect to an X11 display; if this
+     is not specified, the program will use the value of the
+     ~$DISPLAY~ environment variable, and if that is not specified an
+     error will occur.
 
 ** Configuration file syntax
 
@@ -63,11 +69,14 @@
 
     Key names are the standard X11 keysyms. For lowercase and
     uppercase ASCII letters, these are just the letter in lower- and
-    uppercase, respectively; for other characters, use ~xev | grep
-    'keysym'~ to print keysym names.
+    uppercase, respectively; for other characters, use
+    #+BEGIN_SRC bash
+      xev | grep 'keysym'
+    #+END_SRC
+    to print keysym names.
 
-    Note that keysyms should agree with modifiers; for example, write
-    "shift+colon" and "semicolon", rather than "shift+semicolon" and
-    "colon", because it is impossible (at least on an ~en_US~
+    Note that key names should agree with modifiers; for example,
+    write "shift+colon" and "semicolon", rather than "shift+semicolon"
+    and "colon", because it is impossible (at least on an ~en_US~
     keyboard) to type a colon while not holding shift or to type a
     semicolon while holding shift.

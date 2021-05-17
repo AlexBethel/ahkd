@@ -24,9 +24,10 @@ use std::error::Error;
 use std::process::Command;
 use std::thread;
 
-/// Runs the daemon with the given configuration.
-pub fn daemon(cfg: Config) -> Result<Infallible, Box<dyn Error>> {
-    let conn = X11Conn::new()?;
+/// Runs the daemon with the given configuration and on the given X11
+/// display (or the default display if none is specified).
+pub fn daemon(cfg: Config, display_name: Option<&str>) -> Result<Infallible, Box<dyn Error>> {
+    let conn = X11Conn::new(display_name)?;
     let init_keys = get_init_keys(&cfg);
     loop {
         let mut seen_keys = vec![conn.next_key(&init_keys)?];

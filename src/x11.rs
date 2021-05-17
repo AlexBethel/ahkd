@@ -54,9 +54,8 @@ pub struct X11Conn {
 
 impl X11Conn {
     /// Connects to the X11 display.
-    pub fn new() -> Result<Self, Box<dyn Error>> {
-        // TODO: allow arbitrary X11 server names.
-        let display = RustConnection::connect(None)?.0;
+    pub fn new(display_name: Option<&str>) -> Result<Self, Box<dyn Error>> {
+        let display = RustConnection::connect(display_name)?.0;
 
         let setup = display.setup();
         // TODO: what if there's more than one screen?

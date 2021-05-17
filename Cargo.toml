@@ -8,5 +8,9 @@ edition = "2018"
 # https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-x11-keysymdef = "0.2.0"    # Convert among X11 keysyms, unicodes, and string names
+x11-keysymdef = "0.2.0"    # Convert among X11 keysyms, unicodes, and
+                           # string names
 x11rb = "0.8.1"            # Rust bindings to X11
+clap = "~2.33"             # A simple to use, efficient, and
+                           # full-featured Command Line Argument
+                           # Parser

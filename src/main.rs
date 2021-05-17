@@ -16,6 +16,7 @@
 // You should have received a copy of the GNU General Public License
 // along with ahkd. If not, see <https://www.gnu.org/licenses/>.
 
+use clap::{App, Arg};
 use std::convert::Infallible;
 use std::error::Error;
 use std::fmt;
@@ -40,20 +41,30 @@ fn main() {
 }
 
 fn run() -> Result<Infallible, Box<dyn Error>> {
-    let args: Vec<_> = std::env::args().collect();
-    let config_name = if args.len() == 2 {
-        &args[1]
-    } else {
-        return Err(Box::new(AhkdError::UsageError(
-            args.into_iter().next().unwrap_or("ahkd".to_string()),
-        )));
-    };
+    let matches = App::new("ahkd")
+        .version("0.1.0")
+        .author("A. Bethel")
+        .about("Hotkey manager for X11")
+        .arg(Arg::with_name("config-file").required(true).index(1))
+        .arg(
+            Arg::with_name("display")
+                .short("d")
+                .long("display")
+                .value_name("DISPLAY")
+                .help("Selects the X11 display to connect to")
+                .takes_value(true),
+        )
+        .get_matches();
 
+    // "config" is a required argument, so we can `unwrap` here.
+    let config_name = matches.value_of("config-file").unwrap();
     let config_file = File::open(config_name)?;
     let config_buf = BufReader::new(config_file);
     let config = parse_config(config_buf, &config_name)?;
 
-    daemon(config)?;
+    let display_name = matches.value_of("display");
+
+    daemon(config, display_name)?;
     todo!()
 }
 

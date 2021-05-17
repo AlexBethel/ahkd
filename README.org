@@ -42,6 +42,9 @@
    or the word "map", denoting an action to be taken when a sequence
    of keys are pressed.
 
+   Practical examples of all this information can be found in the
+   sample config file.
+
 ** Key sequences
 
    The commands in ~ahkd~ all operate on key sequences. A key sequence

@@ -46,17 +46,16 @@
 
 *** Modifier names
 
-    # TODO: Figure out the mapping to X11's "mod1", "mod2", "mod3",
-    # "mod4", and "mod5" internal modifier names, and add support for
-    # that syntax.
     Modifiers are designed to be amenable to several different styles
-    to fit users with different backgrounds. The following modifier
-    keys and aliases thereof are recognized:
+    to fit different use cases. The following modifier keys and
+    aliases thereof are recognized:
     - Control, Ctrl, C.
-    - Alt, Meta, A, M.
     - Shift, S.
-    - Super, Windows, Command, s.
-    - Hyper, h.
+    - Mod1, Alt, Meta, A, M.
+    - Mod2.
+    - Mod3.
+    - Mod4, Super, Windows, Command, s, Hyper, h.
+    - Mod5.
     Single-letter names are case-sensitive to make shift and super
     distinguishable, but the other modifier names are not.
 

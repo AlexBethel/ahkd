@@ -18,8 +18,8 @@
 
 use crate::cfgfile::{LineText, SyntaxError};
 use std::convert::{TryFrom, TryInto};
-use x11_keysymdef::{lookup_by_codepoint, lookup_by_name};
 use std::hash::{Hash, Hasher};
+use x11_keysymdef::{lookup_by_codepoint, lookup_by_name};
 
 /// A sequence of keys that might be pressed. This type represents the
 /// selector of the `map` and `bind` commands, and the target of the
@@ -113,18 +113,22 @@ impl ModField {
         match text {
             // Case-sensitive short names.
             "C" => self.mod_control = true,
-            "A" | "M" => self.mod1 = true,
-            "s" => self.mod4 = true,
             "S" => self.mod_shift = true,
-            "h" => self.mod4 = true,
+            "A" | "M" => self.mod1 = true,
+            "s" | "h" => self.mod4 = true,
 
             // Non-case-sensitive long names.
             _ => match &*text.to_ascii_lowercase() {
                 "control" | "ctrl" => self.mod_control = true,
-                "alt" | "meta" => self.mod1 = true,
-                "super" | "windows" | "command" => self.mod4 = true,
                 "shift" => self.mod_shift = true,
-                "hyper" => self.mod4 = true,
+                "mod1" | "alt" | "meta" => self.mod1 = true,
+                "mod2" => self.mod2 = true,
+                "mod3" => self.mod3 = true,
+                // Hyper and super are bound to the same modifier on
+                // my computer; not sure whether that's the case on
+                // all keyboards or not...
+                "mod4" | "super" | "windows" | "command" | "hyper" => self.mod4 = true,
+                "mod5" => self.mod5 = true,
                 _ => {
                     let errmsg = format!("Invalid modifier \"{}\"", text);
                     return Err(modifier.to_error(errmsg));

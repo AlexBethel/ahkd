@@ -20,6 +20,7 @@ use crate::keyseq::{Key, Keysym, ModField};
 use crate::AhkdError;
 use std::convert::TryInto;
 use std::error::Error;
+use x11_keysymdef::lookup_by_keysym;
 use x11rb::connection::Connection;
 use x11rb::errors::ConnectionError;
 use x11rb::protocol::{
@@ -115,10 +116,9 @@ impl X11Conn {
 
     /// Gets the first keysym corresponding to a keycode.
     fn keycode_to_keysym(&self, keycode: u8) -> Keysym {
-        Keysym(
-            self.keymap.keysyms
-                [(keycode - self.min_keycode) as usize * self.keymap.keysyms_per_keycode as usize],
-        )
+        let idx = (keycode - self.min_keycode) as usize * self.keymap.keysyms_per_keycode as usize;
+        let keysym = self.keymap.keysyms[idx];
+        Keysym(keysym)
     }
 
     /// Globally grabs the given set of keys from the keybaord.
@@ -202,13 +202,18 @@ impl X11Conn {
         if let Event::KeyPress(e) = ev {
             let keycode = e.detail;
             let modifiers = e.state.into();
-            Some(Key {
-                modifiers,
-                main_key: self.keycode_to_keysym(keycode),
-            })
-        } else {
-            None
+            let keysym = self.keycode_to_keysym(keycode);
+
+            // We received the keysym from the X11 server, so it must
+            // be a valid keysym number, so we can `unwrap` here.
+            if lookup_by_keysym(keysym.0).unwrap().unicode != 0 as char {
+                return Some(Key {
+                    modifiers,
+                    main_key: keysym,
+                });
+            }
         }
+        None
     }
 }
 

@@ -22,6 +22,7 @@ use crate::x11::X11Conn;
 use std::convert::Infallible;
 use std::error::Error;
 use std::process::Command;
+use std::thread;
 
 /// Runs the daemon with the given configuration.
 pub fn daemon(cfg: Config) -> Result<Infallible, Box<dyn Error>> {
@@ -52,11 +53,15 @@ fn do_action(action: &Action) {
         Action::Bind { command } => {
             match Command::new(&command[0]).args(command[1..].iter()).spawn() {
                 Ok(mut handle) => {
-                    // Ignore errors here. We don't care about the
-                    // return status of whatever the user had us
-                    // invoke, and dealing with errors there is their
-                    // problem.
-                    let _ignored = handle.wait();
+                    // Need to call `wait()` at some point because
+                    // Unix.
+                    thread::spawn(move || {
+                        // Ignore errors here. We don't care about the
+                        // return status of whatever the user had us
+                        // invoke, and dealing with errors there is
+                        // their problem.
+                        let _ignored = handle.wait();
+                    });
                 }
                 Err(err) => {
                     println!("Error launching \"{}\": {}", &command[0], err);

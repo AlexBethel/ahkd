@@ -18,7 +18,7 @@
 
 use crate::keyseq::{Key, Keysym, ModField};
 use crate::AhkdError;
-use std::convert::TryInto;
+use std::collections::HashMap;
 use std::error::Error;
 use x11_keysymdef::lookup_by_keysym;
 use x11rb::connection::Connection;
@@ -41,15 +41,17 @@ pub struct X11Conn {
     /// The root window of that display.
     root_window: Window,
 
-    /// The number of the lowest valid keycode. This is used to
-    /// measure the `keymap` off of.
-    min_keycode: u8,
+    /// The keyboard mapping.
+    keymap: KeyMap,
+}
 
-    // TODO: preprocess this somehow, it's nasty to keep this actual
-    // reply structure lying around. Maybe turn it into a HashMap or
-    // something.
-    /// The mapping between keysyms and keycodes.
-    keymap: GetKeyboardMappingReply,
+/// A converter between keycodes and keysyms.
+struct KeyMap {
+    /// The mapping from keysyms to keycodes.
+    ks_to_kc: HashMap<u32, u8>,
+
+    /// The mapping from keycodes to keysyms.
+    kc_to_ks: HashMap<u8, u32>,
 }
 
 impl X11Conn {
@@ -62,17 +64,18 @@ impl X11Conn {
         let root_window = setup.roots[0].root;
         let min_keycode = setup.min_keycode;
         let max_keycode = setup.max_keycode;
-        let keymap = GetKeyboardMappingRequest {
+        let keymap_pkt = GetKeyboardMappingRequest {
             first_keycode: min_keycode,
             count: max_keycode - min_keycode,
         }
         .send(&display)?
         .reply()?;
 
+        let keymap = KeyMap::new(min_keycode, keymap_pkt);
+
         Ok(Self {
             display,
             root_window,
-            min_keycode,
             keymap,
         })
     }
@@ -97,34 +100,11 @@ impl X11Conn {
         Ok(k)
     }
 
-    /// Gets the lowest keycode corresponding to a keysym.
-    fn keysym_to_keycode(&self, keysym: Keysym) -> u8 {
-        // TODO: do this better. This is O(n) in time.
-        // TODO: deal with missing keysyms.
-        let keysym_idx = self
-            .keymap
-            .keysyms
-            .iter()
-            .position(|&x| x == keysym.0)
-            .unwrap();
-
-        ((keysym_idx / self.keymap.keysyms_per_keycode as usize) + self.min_keycode as usize)
-            .try_into()
-            .unwrap()
-    }
-
-    /// Gets the first keysym corresponding to a keycode.
-    fn keycode_to_keysym(&self, keycode: u8) -> Keysym {
-        let idx = (keycode - self.min_keycode) as usize * self.keymap.keysyms_per_keycode as usize;
-        let keysym = self.keymap.keysyms[idx];
-        Keysym(keysym)
-    }
-
     /// Globally grabs the given set of keys from the keybaord.
     fn grab_keys(&self, keys: &[Key]) -> Result<(), Box<dyn Error>> {
         for key in keys {
             // TODO: why am I making a Keysym here?
-            let keycode = self.keysym_to_keycode(Keysym(key.main_key.0));
+            let keycode = self.keymap.keysym_to_keycode(Keysym(key.main_key.0));
 
             GrabKeyRequest {
                 owner_events: false,
@@ -164,7 +144,7 @@ impl X11Conn {
     fn ungrab_keys(&self, keys: &[Key]) -> Result<(), Box<dyn Error>> {
         for key in keys {
             UngrabKeyRequest {
-                key: self.keysym_to_keycode(Keysym(key.main_key.0)),
+                key: self.keymap.keysym_to_keycode(Keysym(key.main_key.0)),
                 grab_window: self.root_window,
                 modifiers: (&key.modifiers).into(),
             }
@@ -201,7 +181,7 @@ impl X11Conn {
         if let Event::KeyPress(e) = ev {
             let keycode = e.detail;
             let modifiers = e.state.into();
-            let keysym = self.keycode_to_keysym(keycode);
+            let keysym = self.keymap.keycode_to_keysym(keycode);
 
             // We received the keysym from the X11 server, so it must
             // be a valid keysym number, so we can `unwrap` here.
@@ -213,6 +193,45 @@ impl X11Conn {
             }
         }
         None
+    }
+}
+
+impl KeyMap {
+    /// Sets up the mappings between keysyms and keycodes.
+    pub fn new(min_keycode: u8, packet: GetKeyboardMappingReply) -> Self {
+        Self {
+            ks_to_kc: packet
+                .keysyms
+                .iter()
+                .enumerate()
+                .map(|(keycode, keysym)| {
+                    (
+                        *keysym,
+                        (keycode / packet.keysyms_per_keycode as usize) as u8 + min_keycode,
+                    )
+                })
+                .collect(),
+            kc_to_ks: packet
+                .keysyms
+                .iter()
+                .step_by(packet.keysyms_per_keycode as _)
+                .enumerate()
+                .map(|(keycode, keysym)| (keycode as u8 + min_keycode, *keysym))
+                .collect(),
+        }
+    }
+
+    /// Gets the lowest keycode corresponding to a keysym.
+    fn keysym_to_keycode(&self, keysym: Keysym) -> u8 {
+        // TODO: deal with missing keysyms.
+        *self.ks_to_kc.get(&keysym.0).unwrap_or_else(|| todo!())
+    }
+
+    /// Gets the first keysym corresponding to a keycode.
+    fn keycode_to_keysym(&self, keycode: u8) -> Keysym {
+        // All valid keycodes must have at least one associated
+        // keysym, so we can `unwrap` here.
+        Keysym(*self.kc_to_ks.get(&keycode).unwrap())
     }
 }
 

@@ -72,11 +72,6 @@ pub struct LineText<'a> {
 
     /// The range of characters delimiting the substring.
     range: Range<usize>,
-
-    /// The value of `text[range]`, i.e., another pointer into `text`.
-    /// This value takes O(n) to compute because of unicode, so we
-    /// cache it here and can therefore fetch it in O(1).
-    substring: &'a str,
 }
 
 /// Iterator over the sections in a line of text separated by some
@@ -149,7 +144,7 @@ impl fmt::Display for SyntaxError {
             "{padding} | {prespace}{underline}",
             padding = " ".repeat(margin),
             prespace = " ".repeat(self.col_num),
-            underline = "^".repeat(self.len)
+            underline = "^".repeat(self.len.max(1))
         )?;
         // writeln!(f, "")?;
 
@@ -170,7 +165,6 @@ impl<'a> LineText<'a> {
             line_num,
             text,
             range: 0..text.len(),
-            substring: text,
         }
     }
 
@@ -196,7 +190,7 @@ impl<'a> LineText<'a> {
         pattern: P,
         err_msg: &str,
     ) -> Result<(LineText<'a>, LineText<'a>), SyntaxError> {
-        match self.substring.find(pattern) {
+        match self.as_str().find(pattern) {
             Some(split_idx) => Ok((
                 self.substr(None, Some(split_idx)),
                 self.substr(Some(split_idx + 1), None),
@@ -204,7 +198,7 @@ impl<'a> LineText<'a> {
 
             // Highlight the last character if an error occurs.
             None => Err(self
-                .substr(Some(self.substring.len()), None)
+                .substr(Some(self.as_str().len()), None)
                 .to_error(err_msg.to_string())),
         }
     }
@@ -212,20 +206,20 @@ impl<'a> LineText<'a> {
     /// Removes leading whitespace from the LineText.
     pub fn trim_start(&self) -> Self {
         let idx = self
-            .substring
+            .as_str()
             .find(|c: char| !c.is_whitespace())
-            .unwrap_or_else(|| self.substring.len());
+            .unwrap_or_else(|| self.as_str().len());
         self.substr(Some(idx), None)
     }
 
-    /// Takes a substring of a LineText, between the two indices. If
-    /// `start` is None, uses the beginning of the string, and if
+    /// Takes a substring of a LineText, between the two byte indices.
+    /// If `start` is None, uses the beginning of the string, and if
     /// `end` is None, uses the end of the string.
     pub fn substr(&self, start: Option<usize>, end: Option<usize>) -> Self {
         let start = start.unwrap_or(0);
-        let end = end.unwrap_or_else(|| self.range.end - self.range.start);
+        let end = end.unwrap_or_else(|| self.as_str().len());
 
-        if end > self.range.end - self.range.start {
+        if end > self.as_str().len() {
             panic!(
                 "Invalid LineText substring {}..{} (string is only {} characters long)",
                 start,
@@ -236,7 +230,6 @@ impl<'a> LineText<'a> {
 
         Self {
             range: self.range.start + start..self.range.start + end,
-            substring: &self.substring[start..end],
             ..*self
         }
     }
@@ -250,17 +243,13 @@ impl<'a> LineText<'a> {
             line: self.text.to_string(),
             line_num: self.line_num,
             col_num: self.range.start,
-            // Sometimes we can end up with a len of 0; extend it to 1
-            // if that's the case, because the user won't be able to
-            // see an underline that's 0 characters wide.
-            len: self.substring.len().max(1),
+            len: self.as_str().len(),
         }
     }
-}
 
-impl<'a> AsRef<str> for LineText<'a> {
-    fn as_ref(&self) -> &str {
-        self.substring
+    /// Gets the contents of the referenced section of text.
+    pub fn as_str(&self) -> &'a str {
+        &self.text[self.range.clone()]
     }
 }
 
@@ -276,7 +265,7 @@ impl<'a, P: Fn(char) -> bool> LineSplit<'a, P> {
         if self.done {
             None
         } else {
-            Some(match self.line_text.substring.find(|c| (self.pattern)(c)) {
+            Some(match self.line_text.as_str().find(|c| (self.pattern)(c)) {
                 None => {
                     // The whole rest of the string is one block, or
                     // we've reached the end of the string.
@@ -284,7 +273,7 @@ impl<'a, P: Fn(char) -> bool> LineSplit<'a, P> {
                     let section = self.line_text.clone();
                     self.line_text = self
                         .line_text
-                        .substr(Some(self.line_text.substring.len()), None);
+                        .substr(Some(self.line_text.as_str().len()), None);
                     section
                 }
                 Some(idx) => {
@@ -308,7 +297,7 @@ impl<'a, P: Fn(char) -> bool> Iterator for LineSplit<'a, P> {
             match item {
                 None => None,
                 Some(text) => {
-                    if text.substring.len() == 0 {
+                    if text.as_str().len() == 0 {
                         // Don't return a blank substring if `merge`
                         // is true.
                         self.next()
@@ -347,7 +336,7 @@ pub fn parse_config<T: Read>(
 /// Returns Ok(None) if the line was blank or a comment.
 fn parse_command<'a>(line: LineText<'a>) -> Result<Option<ConfigLine>, SyntaxError> {
     let trimmed = line.trim_start();
-    match trimmed.as_ref().chars().next() {
+    match trimmed.as_str().chars().next() {
         None | Some('#') => {
             // Blank line or comment.
             return Ok(None);
@@ -361,11 +350,11 @@ fn parse_command<'a>(line: LineText<'a>) -> Result<Option<ConfigLine>, SyntaxErr
     // therefore we must logically have at least one word.
     let first_word = split.next().unwrap();
 
-    Ok(Some(match first_word.as_ref() {
+    Ok(Some(match first_word.as_str() {
         "bind" => parse_cmd_bind(split.rest()),
         "map" => parse_cmd_map(split.rest()),
         _ => {
-            let errmsg = format!("Unrecognized command \"{}\"", first_word.as_ref());
+            let errmsg = format!("Unrecognized command \"{}\"", first_word.as_str());
             Err(first_word.to_error(errmsg))
         }
     }?))
@@ -377,7 +366,7 @@ fn parse_cmd_bind<'a>(args: LineText<'a>) -> Result<ConfigLine, SyntaxError> {
         keyseq: keys.try_into()?,
         action: Action::Bind {
             command: command
-                .as_ref()
+                .as_str()
                 .split_ascii_whitespace()
                 .map(|s| s.to_string())
                 .collect(),
@@ -408,12 +397,11 @@ mod tests {
             line_num: 10,
             text,
             range: 0..text.len(),
-            substring: text,
         };
 
         let split: Vec<_> = lt
             .split(char::is_whitespace, true)
-            .map(|lt| lt.substring)
+            .map(|lt| lt.as_str())
             .collect();
         assert_eq!(split, vec!["two", "words"]);
 
@@ -424,12 +412,11 @@ mod tests {
             line_num: 10,
             text,
             range: 0..text.len(),
-            substring: text,
         };
 
         let split: Vec<_> = lt
             .split(char::is_whitespace, true)
-            .map(|lt| lt.substring)
+            .map(|lt| lt.as_str())
             .collect();
         assert_eq!(split, vec!["with", "whitespace"]);
     }
@@ -442,13 +429,12 @@ mod tests {
             line_num: 10,
             text,
             range: 0..text.len(),
-            substring: text,
         };
 
         // Check normal function.
         let success = lt.split1(char::is_whitespace, "Expected space").unwrap();
-        let left = success.0.substring;
-        let right = success.1.substring;
+        let left = success.0.as_str();
+        let right = success.1.as_str();
         assert_eq!((left, right), ("actually", "three words"));
 
         // Check for exceptional cases.

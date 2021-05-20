@@ -109,7 +109,7 @@ impl<'a> TryFrom<LineText<'a>> for Key {
 impl ModField {
     /// Attempts to add a modifier key with the given name.
     fn add(&mut self, modifier: LineText<'_>) -> Result<(), SyntaxError> {
-        let text = modifier.as_ref();
+        let text = modifier.as_str();
         match text {
             // Case-sensitive short names.
             "C" => self.mod_control = true,
@@ -144,17 +144,17 @@ impl<'a> TryFrom<LineText<'a>> for Keysym {
     type Error = SyntaxError;
 
     fn try_from(text: LineText<'a>) -> Result<Self, Self::Error> {
-        let record = match (text.as_ref()).len() {
+        let record = match (text.as_str()).len() {
             // len is 1, so we must have a zeroth character, so unwrap
             // is OK here.
-            1 => lookup_by_codepoint(text.as_ref().chars().next().unwrap()),
-            _ => lookup_by_name(text.as_ref()),
+            1 => lookup_by_codepoint(text.as_str().chars().next().unwrap()),
+            _ => lookup_by_name(text.as_str()),
         };
 
         match record {
             Some(record) => Ok(Self(record.keysym)),
             None => {
-                let errmsg = format!("Invalid keysym \"{}\"", text.as_ref());
+                let errmsg = format!("Invalid keysym \"{}\"", text.as_str());
                 Err(text.to_error(errmsg))
             }
         }
